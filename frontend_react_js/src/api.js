@@ -20,6 +20,14 @@ async function request(path, opts = {}) {
 }
 
 // PUBLIC_INTERFACE
+export async function login(email, password) {
+  /** Login using email and password (password is currently not validated by backend but included for UI compatibility)
+   * Returns { token, user }
+   */
+  return request('/auth/signin', { method: 'POST', body: JSON.stringify({ email, password }) });
+}
+
+// PUBLIC_INTERFACE
 export async function signup(email) {
   /** Signup using email only returns { token, user } */
   return request('/auth/signup', { method: 'POST', body: JSON.stringify({ email }) });

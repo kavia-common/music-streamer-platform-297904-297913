@@ -1,9 +1,11 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import {
   signup, signin, getMe,
   searchTracks, listPlaylists, createPlaylist, getPlaylist, addTrackToPlaylist,
   streamUrl, logPlay, recentlyPlayed
 } from '../api';
+import Login from '../components/Login';
 
 function Auth({ onAuth }) {
   const [email, setEmail] = useState('');
@@ -72,26 +74,32 @@ function Playlists({ onAddTrack }) {
   const [items, setItems] = useState([]);
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
-  const reload = async () => {
-    try {
-      const res = await listPlaylists();
-      setItems(res.items);
-    } catch (e) {
-      console.error(e);
-    }
-  };
-  useEffect(() => { reload(); }, []);
+  
+  useEffect(() => {
+    const reload = async () => {
+      try {
+        const res = await listPlaylists();
+        setItems(res.items);
+      } catch (e) {
+        console.error(e);
+      }
+    };
+    reload();
+  }, []);
+  
   const create = async () => {
     if (!name) return;
     try {
       await createPlaylist(name, '');
       setName('');
       setCreating(false);
-      reload();
+      const res = await listPlaylists();
+      setItems(res.items);
     } catch (e) {
       alert(e.message);
     }
   };
+  
   return (
     <div style={{ padding: 16 }}>
       <h3>Playlists</h3>
@@ -112,11 +120,17 @@ function Playlists({ onAddTrack }) {
 function PlaylistItem({ playlist, onAddTrack }) {
   const [expanded, setExpanded] = useState(false);
   const [details, setDetails] = useState(null);
-  const load = async () => {
-    const res = await getPlaylist(playlist.id);
-    setDetails(res);
-  };
-  useEffect(() => { if (expanded) load(); /* eslint-disable react-hooks/exhaustive-deps */ }, [expanded]);
+  
+  useEffect(() => {
+    const load = async () => {
+      const res = await getPlaylist(playlist.id);
+      setDetails(res);
+    };
+    if (expanded) {
+      load();
+    }
+  }, [expanded, playlist.id]);
+  
   return (
     <li style={{ margin: '8px 0' }}>
       <button onClick={() => setExpanded(!expanded)}>{expanded ? 'Hide' : 'Show'}</button>
@@ -157,15 +171,19 @@ function PlayerBar({ current, onEnded }) {
 
 function Recently() {
   const [items, setItems] = useState([]);
-  const reload = async () => {
-    try {
-      const res = await recentlyPlayed();
-      setItems(res.items);
-    } catch (e) {
-      console.error(e);
-    }
-  };
-  useEffect(() => { reload(); }, []);
+  
+  useEffect(() => {
+    const reload = async () => {
+      try {
+        const res = await recentlyPlayed();
+        setItems(res.items);
+      } catch (e) {
+        console.error(e);
+      }
+    };
+    reload();
+  }, []);
+  
   return (
     <div style={{ padding: 16 }}>
       <h3>Recently Played</h3>
@@ -180,24 +198,9 @@ function Recently() {
   );
 }
 
-export default function App() {
-  const [user, setUser] = useState(null);
+function MainApp() {
   const [lastSearched, setLastSearched] = useState([]);
   const [current, setCurrent] = useState(null);
-
-  useEffect(() => {
-    const restore = async () => {
-      const token = localStorage.getItem('token');
-      if (!token) return;
-      try {
-        const res = await getMe();
-        setUser(res.user);
-      } catch {
-        localStorage.removeItem('token');
-      }
-    };
-    restore();
-  }, []);
 
   const handlePlay = async (t) => {
     const track = {
@@ -239,10 +242,6 @@ export default function App() {
     }
   };
 
-  if (!user) {
-    return <Auth onAuth={setUser} />;
-  }
-
   return (
     <div style={{ paddingBottom: 80 }}>
       <div style={{ display: 'flex', gap: 24, padding: 16 }}>
@@ -256,5 +255,56 @@ export default function App() {
       </div>
       <PlayerBar current={current} onEnded={() => {}} />
     </div>
+  );
+}
+
+export default function App() {
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const restore = async () => {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        setLoading(false);
+        return;
+      }
+      try {
+        const res = await getMe();
+        setUser(res.user);
+      } catch {
+        localStorage.removeItem('token');
+      } finally {
+        setLoading(false);
+      }
+    };
+    restore();
+  }, []);
+
+  const handleLoginSuccess = (userData) => {
+    setUser(userData);
+  };
+
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
+        <p>Loading...</p>
+      </div>
+    );
+  }
+
+  return (
+    <Router>
+      <Routes>
+        <Route
+          path="/login"
+          element={user ? <Navigate to="/" replace /> : <Login onLoginSuccess={handleLoginSuccess} />}
+        />
+        <Route
+          path="/"
+          element={user ? <MainApp /> : <Navigate to="/login" replace />}
+        />
+      </Routes>
+    </Router>
   );
 }
